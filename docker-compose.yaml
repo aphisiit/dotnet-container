@@ -64,6 +64,12 @@ services:
           memory: 256M
     environment:
       - TZ=Asia/Bangkok
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:9090/healthz"]
+      interval: 1m30s
+      timeout: 30s
+      retries: 5
+      start_period: 30s
     ports:
       - 9090:9090
     networks:

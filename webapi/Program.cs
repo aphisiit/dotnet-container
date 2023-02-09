@@ -9,6 +9,7 @@ using webapi.Services;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
+builder.Services.AddHealthChecks();
 
 builder.Services.AddHealthChecks()
     .AddCheck<HealthCheck>(nameof(HealthCheck))
