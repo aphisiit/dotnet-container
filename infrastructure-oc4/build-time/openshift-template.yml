@@ -1,0 +1,148 @@
+apiVersion: v1
+kind: Template
+
+metadata:
+  name: standard-buildtime-apply-template
+
+parameters:
+- description: Name of most resources
+  name: APPLICATION_NAME
+  required: true
+
+- description: Git repo URI
+  name: GIT_REPO_URI
+  required: true
+
+- description: Git repo target head
+  name: GIT_REPO_TARGET_HEAD
+  required: true
+
+- description: SDK image tag version for docker
+  name: DOTNET_SDK_IMAGE
+  required: true
+
+- description: Runtime image tag version for docker
+  name: DOTNET_RUNTIME_IMAGE
+  required: true
+
+- description: CPU usage limit
+  name: BUILDER_LIMIT_CPU
+  value: "750m"
+
+- description: CPU usage request
+  name: BUILDER_REQUESTS_CPU
+  value: "150m"
+
+- description: Memory usage limit
+  name: BUILDER_LIMIT_MEMORY
+  value: "2Gi"
+
+- description: Memory usage request
+  name: BUILDER_REQUESTS_MEMORY
+  value: "2Gi"
+
+- description: openshift build config resourceVersion
+  name: BC_RESOURCE_VERSION
+  value: '1'
+
+- description: openshift build config resourceVersion (builder)
+  name: BC_BUILDER_RESOURCE_VERSION
+  value: '1'
+
+objects:
+- apiVersion: v1
+  kind: BuildConfig
+  metadata:
+    name: ${APPLICATION_NAME}-builder
+    labels:
+      app: ${APPLICATION_NAME}
+#    resourceVersion: ${BC_BUILDER_RESOURCE_VERSION}
+  spec:
+    resources:
+      requests:
+        cpu: ${BUILDER_REQUESTS_CPU}
+        memory: ${BUILDER_REQUESTS_MEMORY}
+      limits:
+        cpu: ${BUILDER_LIMIT_CPU}
+        memory: ${BUILDER_LIMIT_MEMORY}
+    source:
+      type: Git
+      git:
+        uri: ${GIT_REPO_URI}
+        ref: ${GIT_REPO_TARGET_HEAD}
+      sourceSecret:
+          name: github-secret-aphisit
+    strategy:
+      type: Docker
+      dockerStrategy:
+        dockerfilePath: Dockerfile.API.BuildTime
+        from:
+          kind: DockerImage
+          name: >-
+            image-registry.openshift-image-registry.svc:5000/app-support-dev-axa-kt-th/${DOTNET_SDK_IMAGE}
+    output:
+      to:
+        kind: ImageStreamTag
+        name: ${APPLICATION_NAME}-builder:latest
+
+- apiVersion: build.openshift.io/v1
+  kind: BuildConfig
+  metadata:
+    labels:
+      app: ${APPLICATION_NAME}
+    name: ${APPLICATION_NAME}
+#    resourceVersion: ${BC_RESOURCE_VERSION}
+  spec:
+    failedBuildsHistoryLimit: 1
+    nodeSelector: null
+    output:
+      to:
+        kind: ImageStreamTag
+        name: ${APPLICATION_NAME}:latest
+    runPolicy: Serial
+    source:
+      dockerfile: |
+        FROM ${DOTNET_RUNTIME_IMAGE}
+        USER root
+
+        ENV ASPNETCORE_ENVIRONMENT=Development
+        ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
+
+        RUN apk add --no-cache curl icu-libs krb5-libs libgcc libintl libssl1.1 libstdc++ zlib tzdata
+
+        RUN mkdir -p /opt/app-root
+        WORKDIR /opt/app-root
+        COPY ./publish .
+
+        EXPOSE 9090
+
+        ENTRYPOINT [ "dotnet", "webapi.dll" ]
+      images:
+        - from:
+            kind: ImageStreamTag
+            name: ${APPLICATION_NAME}-builder:latest
+          paths:
+            - destinationDir: .
+              sourcePath: /opt/dotnet/webapi/bin/Release/net6.0/publish
+      type: Dockerfile
+    strategy:
+      dockerStrategy:
+        from:
+          kind: DockerImage
+          name: image-registry.openshift-image-registry.svc:5000/app-support-dev-axa-kt-th/${DOTNET_RUNTIME_IMAGE}
+      type: Docker
+    successfulBuildsHistoryLimit: 1
+
+- apiVersion: v1
+  kind: ImageStream
+  metadata:
+    name: ${APPLICATION_NAME}-builder
+    labels:
+      app: ${APPLICATION_NAME}
+
+- apiVersion: v1
+  kind: ImageStream
+  metadata:
+    name: ${APPLICATION_NAME}
+    labels:
+      app: ${APPLICATION_NAME}

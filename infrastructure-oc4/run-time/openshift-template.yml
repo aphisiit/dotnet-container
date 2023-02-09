@@ -1,0 +1,158 @@
+apiVersion: v1
+kind: Template
+
+metadata:
+  name: standard-runtime-apply-template
+
+parameters:
+- description: Name of most resources
+  name: APPLICATION_NAME
+  required: true
+
+- description: Project namespace
+  name: NAMESPACE
+  required: true
+
+- description: Version image to deploy
+  name: IMAGE_VERSION
+  value: 'latest'
+
+- description: Service external port
+  name: EXTERNAL_PORT
+  value: "9090"
+
+- description: Healthcheck URI
+  name: HEALTH_CHECK_URI
+  value: /api/v1/Health
+
+- description: CPU usage limit
+  name: LIMIT_CPU
+  value: "200m"
+
+- description: CPU usage request
+  name: REQUESTS_CPU
+  value: "200m"
+
+- description: Memory usage limit
+  name: LIMIT_MEMORY
+  value: "512Mi"
+
+- description: Memory usage request
+  name: REQUESTS_MEMORY
+  value: "512Mi"
+
+- description: How many instances of this service
+  name: REPLICA_COUNT
+  value: "1"
+
+- description: HTTP PROXY to use
+  name: PROXY_HOST
+  value: http://egress-proxy:080
+
+- description: Timeout on the route
+  name: ROUTE_TIMEOUT
+  value: 60s
+
+- description: openshift deployment config resourceVersion
+  name: DC_RESOURCE_VERSION
+  value: '1'
+
+- description: openshift service resourceVersion
+  name: SVC_RESOURCE_VERSION
+  value: '1'
+
+- description: DEPLOY_DATE for deploy 
+  name: DEPLOY_DATE
+  required: true
+
+objects:
+- apiVersion: v1
+  kind: Service
+  metadata:
+    name: ${APPLICATION_NAME}
+    labels:
+      app: ${APPLICATION_NAME}
+    resourceVersion: ${SVC_RESOURCE_VERSION}
+  spec:
+    ports:
+      - name: ${APPLICATION_NAME}-tcp-${EXTERNAL_PORT}
+        protocol: TCP
+        port: ${{EXTERNAL_PORT}}
+        targetPort: ${{EXTERNAL_PORT}}
+    selector:
+      app: ${APPLICATION_NAME}
+
+- apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    labels:
+      app: ${APPLICATION_NAME}
+    name: ${APPLICATION_NAME}
+    resourceVersion: ${DC_RESOURCE_VERSION}
+  spec:
+    replicas: ${{REPLICA_COUNT}}
+    revisionHistoryLimit: 1
+    selector:
+      matchLabels:
+        app: ${APPLICATION_NAME}
+    strategy:
+      type: RollingUpdate
+      rollingParams:
+        intervalSeconds: 1
+        maxSurge: 100%
+        maxUnavailable: 0%
+        timeoutSeconds: 600
+        updatePeriodSeconds: 1
+      activeDeadlineSeconds: 21600
+      recreateParams:
+        timeoutSeconds: 10000
+    template:
+      metadata:
+        labels:
+          app: ${APPLICATION_NAME}
+        annotations:
+          deployedDate: ${DEPLOY_DATE}
+      spec:
+        containers:
+          - env:
+            envFrom:
+              - configMapRef:
+                  name: ${APPLICATION_NAME}
+            image: image-registry.openshift-image-registry.svc:5000/${NAMESPACE}/${APPLICATION_NAME}:${IMAGE_VERSION}
+            imagePullPolicy: Always
+            name: ${APPLICATION_NAME}
+            ports:
+              - containerPort: ${{EXTERNAL_PORT}}
+                protocol: TCP
+            # readinessProbe:
+            #   initialDelaySeconds: 60
+            #   httpGet:
+            #     path: /actuator/health
+            #     port: ${{EXTERNAL_PORT}}
+            #     scheme: HTTP
+            #   timeoutSeconds: 10
+            livenessProbe:
+              tcpSocket:
+                port: ${{EXTERNAL_PORT}}
+              initialDelaySeconds: 120
+              timeoutSeconds: 10
+              periodSeconds: 20
+              successThreshold: 1
+              failureThreshold: 3
+            resources:
+              limits:
+                cpu: ${LIMIT_CPU}
+                memory: ${LIMIT_MEMORY}
+              requests:
+                cpu: ${REQUESTS_CPU}
+                memory: ${REQUESTS_MEMORY}
+            terminationMessagePath: /dev/termination-log
+            terminationMessagePolicy: File            
+        dnsPolicy: ClusterFirst
+        restartPolicy: Always
+        terminationGracePeriodSeconds: 30
+        volumes:
+          - name: ${APPLICATION_NAME}
+            configMap:
+              defaultMode: 420
+              name: ${APPLICATION_NAME}

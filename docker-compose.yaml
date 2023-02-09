@@ -1,0 +1,74 @@
+version: '3'
+services:
+  postgresql-db:
+    image: postgres:15.1-alpine3.17
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    environment:
+      - TZ=Asia/Bangkok
+      - POSTGRES_DB=test
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=admin
+    volumes:
+      - ./db-init-scripts:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready", "-d", "postgres"]
+      interval: 1m30s
+      timeout: 30s
+      retries: 5
+      start_period: 30s
+    ports:
+      - 5432:5432
+    networks:
+      - net-standard
+
+  pg-admin:
+    image: dpage/pgadmin4:6.19
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    restart: always
+    environment:
+      - TZ=Asia/Bangkok
+      - PGADMIN_DEFAULT_EMAIL=admin@mail.com
+      - PGADMIN_DEFAULT_PASSWORD=P@ssw0rd
+    healthcheck:
+      test: ["CMD", "wget", "-O", "-", "http://localhost:80/misc/ping"]
+    ports:
+      - 9000:80
+    networks:
+      - net-standard
+
+  dotnet-api:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    environment:
+      - TZ=Asia/Bangkok
+    ports:
+      - 9090:9090
+    networks:
+      - net-standard
+
+networks:
+  net-standard:
+    driver: bridge

@@ -1,0 +1,5 @@
+APPLICATION_NAME=qdoc-poc
+GIT_REPO_URI=https://github.com/aphisiit/qdoc-poc.git
+DOTNET_SDK_IMAGE=dotnet-sdk:6.0.405-alpine3.17
+DOTNET_RUNTIME_IMAGE=dotnet-aspnet:6.0.13-alpine3.17
+EXTERNAL_PORT="9090"

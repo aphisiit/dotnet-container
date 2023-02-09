@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: Template
+
+metadata:
+  name: standard-runtime-apply-template
+
+parameters:
+  - description: Name of most resources
+    name: APPLICATION_NAME
+    required: true
+
+  - description: openshift configmap resourceVersion
+    name: CM_RESOURCE_VERSION
+    value: '1'
+
+  - description: Service external port
+    name: EXTERNAL_PORT
+    value: "9090"
+
+objects:
+  - apiVersion: v1
+    data:
+      TZ: Asia/Bangkok
+    kind: ConfigMap
+    metadata:
+      name: ${APPLICATION_NAME}
+      resourceVersion: ${CM_RESOURCE_VERSION}
+      labels:
+        app: ${APPLICATION_NAME}
